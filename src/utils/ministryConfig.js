@@ -2,17 +2,13 @@
 // CONFIGURAÇÃO DOS MINISTÉRIOS
 // ============================================================
 
-// Campos da Música variam por dia da semana:
-// Quarta  (3): só Música Especial/Culto
+// Música: apenas Sábado e Domingo
+// Sábado (6): Grupo de Louvor + Música Especial/Culto + Escola Sabatina
 // Domingo (0): Grupo de Louvor + Música Especial/Culto
-// Sábado  (6): Grupo de Louvor + Música Especial/Culto + Escola Sabatina
 
 export const MUSIC_FIELDS_BY_DAY = {
   0: [ // Domingo
     { id: 'grupo_louvor', label: 'Grupo de Louvor',         type: 'member', placeholder: 'Selecione o grupo...' },
-    { id: 'musica_culto', label: 'Música Especial / Culto', type: 'text',   placeholder: 'Nome ou grupo...' },
-  ],
-  3: [ // Quarta
     { id: 'musica_culto', label: 'Música Especial / Culto', type: 'text',   placeholder: 'Nome ou grupo...' },
   ],
   6: [ // Sábado
@@ -28,6 +24,28 @@ export const MUSIC_ALL_FIELDS = [
   { id: 'escola_sabatina', label: 'Escola Sabatina' },
 ];
 
+// Recepção: campos variam por dia
+// Sábado (6): 2 recepcionistas
+// Domingo (0) e Quarta (3): 1 recepcionista
+
+export const RECEPCAO_FIELDS_BY_DAY = {
+  0: [ // Domingo
+    { id: 'recepcao_1', label: 'Recepcionista', type: 'member', placeholder: 'Selecione...' },
+  ],
+  3: [ // Quarta
+    { id: 'recepcao_1', label: 'Recepcionista', type: 'member', placeholder: 'Selecione...' },
+  ],
+  6: [ // Sábado
+    { id: 'recepcao_1', label: 'Recepcionista 1', type: 'member', placeholder: 'Selecione...' },
+    { id: 'recepcao_2', label: 'Recepcionista 2', type: 'member', placeholder: 'Selecione...' },
+  ],
+};
+
+export const RECEPCAO_ALL_FIELDS = [
+  { id: 'recepcao_1', label: 'Recepcionista 1' },
+  { id: 'recepcao_2', label: 'Recepcionista 2' },
+];
+
 export const MINISTRIES = {
   musica: {
     id: 'musica',
@@ -36,7 +54,7 @@ export const MINISTRIES = {
     color: 'indigo',
     fields: MUSIC_ALL_FIELDS,
     fieldsByDay: MUSIC_FIELDS_BY_DAY,
-    showOnDays: [0, 3, 6],
+    showOnDays: [0, 6], // ← apenas Sábado e Domingo
     hasObservations: true,
   },
   diaconato: {
@@ -69,11 +87,9 @@ export const MINISTRIES = {
     label: 'Recepção',
     icon: '🤝',
     color: 'rose',
-    fields: [
-      { id: 'recepcao_1', label: 'Recepcionista 1', type: 'member', placeholder: 'Selecione...' },
-      { id: 'recepcao_2', label: 'Recepcionista 2', type: 'member', placeholder: 'Selecione...' },
-    ],
-    showOnDays: [0, 6],
+    fields: RECEPCAO_ALL_FIELDS,
+    fieldsByDay: RECEPCAO_FIELDS_BY_DAY,
+    showOnDays: [0, 3, 6], // ← Domingo, Quarta e Sábado
     hasObservations: false,
   },
 };
