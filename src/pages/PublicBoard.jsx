@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { MINISTRY_LIST, getMinistry, COLOR_MAP, getFieldsForDate } from '../utils/ministryConfig';
-import { generateScheduleDates, QUARTERS, BIMESTERS, MONTHS_PT, getCurrentQuarter, getCurrentYear } from '../utils/dateUtils';
+import { generateScheduleDates, generateWeeksForDiaconato, QUARTERS, BIMESTERS, MONTHS_PT, getCurrentQuarter, getCurrentYear } from '../utils/dateUtils';
 import { generateSchedulePDF } from '../utils/pdfUtils';
 import { ADVENTIST_LOGO_BASE64 } from '../utils/adventistLogo';
 
@@ -13,10 +13,12 @@ export default function PublicBoard() {
   const [selectedPeriod, setSelectedPeriod] = useState(getCurrentQuarter());
   const [selectedYear, setSelectedYear] = useState(getCurrentYear());
   const [scheduleData, setScheduleData] = useState({});
-  const [ministryConfig, setMinistryConfig] = useState({}); // observações + imagem
+  const [ministryConfig, setMinistryConfig] = useState({});
   const [loading, setLoading] = useState(true);
   const [generatingPDF, setGeneratingPDF] = useState(false);
   const [filterMonth, setFilterMonth] = useState('all');
+
+  const isDiaconato = activeMinistry === 'diaconato';
 
   useEffect(() => {
     getDoc(doc(db, 'config', 'church')).then(snap => {
@@ -25,41 +27,62 @@ export default function PublicBoard() {
     }).catch(() => setLoading(false));
   }, []);
 
-  // Carrega config do ministério (observações + imagem)
   useEffect(() => {
     getDoc(doc(db, 'ministryConfig', activeMinistry)).then(snap => {
-      if (snap.exists()) setMinistryConfig(snap.data());
-      else setMinistryConfig({});
+      setMinistryConfig(snap.exists() ? snap.data() : {});
     }).catch(() => setMinistryConfig({}));
   }, [activeMinistry]);
 
+  // Datas normais (para ministérios não-diaconato)
   const allDates = useMemo(() => {
+    if (isDiaconato) return [];
     const periods = selectedPeriodType === 'quarter' ? QUARTERS : BIMESTERS;
     const period = periods[selectedPeriod];
     if (!period) return [];
     return generateScheduleDates(period.months, selectedYear);
-  }, [selectedPeriodType, selectedPeriod, selectedYear]);
+  }, [selectedPeriodType, selectedPeriod, selectedYear, isDiaconato]);
 
   const ministryDates = useMemo(() => {
+    if (isDiaconato) return [];
     const ministry = getMinistry(activeMinistry);
     if (!ministry) return [];
     return allDates.filter(d => ministry.showOnDays.includes(d.dayOfWeek));
-  }, [allDates, activeMinistry]);
+  }, [allDates, activeMinistry, isDiaconato]);
 
-  const filteredDates = useMemo(() =>
-    filterMonth === 'all' ? ministryDates : ministryDates.filter(d => d.month === parseInt(filterMonth)),
-    [ministryDates, filterMonth]);
+  // Semanas (só para diaconato)
+  const weeks = useMemo(() => {
+    if (!isDiaconato) return [];
+    const periods = selectedPeriodType === 'quarter' ? QUARTERS : BIMESTERS;
+    const period = periods[selectedPeriod];
+    if (!period) return [];
+    return generateWeeksForDiaconato(period.months, selectedYear);
+  }, [selectedPeriodType, selectedPeriod, selectedYear, isDiaconato]);
+
+  // Filtro por mês
+  const filteredDates = useMemo(() => {
+    if (isDiaconato) return [];
+    if (filterMonth === 'all') return ministryDates;
+    return ministryDates.filter(d => d.month === parseInt(filterMonth));
+  }, [ministryDates, filterMonth, isDiaconato]);
+
+  const filteredWeeks = useMemo(() => {
+    if (!isDiaconato) return [];
+    if (filterMonth === 'all') return weeks;
+    return weeks.filter(w => w.month === parseInt(filterMonth));
+  }, [weeks, filterMonth, isDiaconato]);
 
   const availableMonths = useMemo(() => {
-    const months = new Set(ministryDates.map(d => d.month));
+    const source = isDiaconato ? weeks : ministryDates;
+    const months = new Set(source.map(d => d.month));
     return Array.from(months).sort();
-  }, [ministryDates]);
+  }, [ministryDates, weeks, isDiaconato]);
 
   const periodLabel = useMemo(() => {
     const periods = selectedPeriodType === 'quarter' ? QUARTERS : BIMESTERS;
     return `${periods[selectedPeriod]?.label} de ${selectedYear}`;
   }, [selectedPeriodType, selectedPeriod, selectedYear]);
 
+  // Carrega escala do Firestore
   useEffect(() => {
     const scheduleId = `${activeMinistry}_${selectedPeriodType}${selectedPeriod}_${selectedYear}`;
     const unsub = onSnapshot(doc(db, 'schedules', scheduleId), snap => {
@@ -71,31 +94,37 @@ export default function PublicBoard() {
   const ministry = getMinistry(activeMinistry);
   const colors = ministry ? COLOR_MAP[ministry.color] : COLOR_MAP.indigo;
   const years = [getCurrentYear() - 1, getCurrentYear(), getCurrentYear() + 1];
+  const allFields = ministry?.fieldsByDay ? ministry.fields : ministry?.fields || [];
 
   async function handlePDF() {
     setGeneratingPDF(true);
     try {
-      await generateSchedulePDF({
-        churchName: config?.churchName || 'Igreja Adventista do Sétimo Dia',
-        ministryLabel: ministry?.label || '',
-        periodLabel,
-        ministry,
-        dates: filteredDates,
-        scheduleData,
-        ministryImage: ministryConfig?.image || null,
-        observations: ministryConfig?.observations || '',
-      });
+      if (isDiaconato) {
+        const weekDates = filteredWeeks.map(w => ({ ...w, dayOfWeek: -1, dayName: '', label: w.label, id: w.id }));
+        await generateSchedulePDF({
+          churchName: config?.churchName || 'Igreja Adventista do Sétimo Dia',
+          ministryLabel: 'Diaconato', periodLabel,
+          ministry: { ...ministry, isWeekly: true },
+          dates: weekDates, scheduleData,
+          ministryImage: ministryConfig?.image || null, observations: '',
+        });
+      } else {
+        await generateSchedulePDF({
+          churchName: config?.churchName || 'Igreja Adventista do Sétimo Dia',
+          ministryLabel: ministry?.label || '', periodLabel, ministry,
+          dates: filteredDates, scheduleData,
+          ministryImage: ministryConfig?.image || null,
+          observations: ministryConfig?.observations || '',
+        });
+      }
     } catch (e) { alert('Erro ao gerar PDF: ' + e.message); }
     finally { setGeneratingPDF(false); }
   }
 
-  // Colunas para o cabeçalho da tabela
-  const allFields = ministry?.fieldsByDay ? ministry.fields : ministry?.fields || [];
-
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
-        <div className="w-10 h-10 border-4 border-navy-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <div className="w-10 h-10 border-4 border-navy-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"/>
         <p className="text-gray-400 text-sm">Carregando escala...</p>
       </div>
     </div>
@@ -103,11 +132,10 @@ export default function PublicBoard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* ── Header ── */}
+      {/* Header */}
       <header className="bg-navy-700 text-white shadow-xl">
         <div className="max-w-6xl mx-auto px-4 py-5 flex items-center gap-4">
-          {/* Logo IASD — sempre visível */}
-          <img src={ADVENTIST_LOGO_BASE64} alt="IASD" className="w-14 h-14 object-contain shrink-0" />
+          <img src={ADVENTIST_LOGO_BASE64} alt="IASD" className="w-14 h-14 object-contain shrink-0"/>
           <div className="flex-1 min-w-0">
             <h1 className="font-display text-2xl md:text-3xl font-bold leading-tight">
               {config?.churchName || 'Igreja Adventista do Sétimo Dia'}
@@ -121,7 +149,7 @@ export default function PublicBoard() {
       </header>
 
       <div className="max-w-6xl mx-auto px-4 py-8 space-y-6 fade-in">
-        {/* ── Filtros ── */}
+        {/* Filtros */}
         <div className="card">
           <h2 className="font-display text-lg font-bold text-navy-700 mb-4 flex items-center gap-2">
             <span>🗓️</span> Selecionar Período
@@ -158,7 +186,9 @@ export default function PublicBoard() {
                 {availableMonths.map(m => <option key={m} value={m}>{MONTHS_PT[m]}</option>)}
               </select>
             </div>
-            <button onClick={handlePDF} disabled={generatingPDF || filteredDates.length === 0} className="btn-gold flex items-center gap-2 whitespace-nowrap">
+            <button onClick={handlePDF}
+              disabled={generatingPDF || (isDiaconato ? filteredWeeks.length === 0 : filteredDates.length === 0)}
+              className="btn-gold flex items-center gap-2 whitespace-nowrap">
               {generatingPDF
                 ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>Gerando...</>
                 : <><span>📄</span> Baixar PDF</>}
@@ -166,13 +196,13 @@ export default function PublicBoard() {
           </div>
         </div>
 
-        {/* ── Abas de Ministério ── */}
+        {/* Abas de Ministério */}
         <div className="flex flex-wrap gap-2">
           {MINISTRY_LIST.map(m => {
             const mc = COLOR_MAP[m.color];
             const active = activeMinistry === m.id;
             return (
-              <button key={m.id} onClick={() => setActiveMinistry(m.id)}
+              <button key={m.id} onClick={() => { setActiveMinistry(m.id); setFilterMonth('all'); }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200
                   ${active ? `${mc.tab} shadow-md scale-105` : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}>
                 <span>{m.icon}</span> {m.label}
@@ -181,8 +211,8 @@ export default function PublicBoard() {
           })}
         </div>
 
-        {/* ── Observações (se houver) ── */}
-        {ministryConfig?.observations && (
+        {/* Observações */}
+        {!isDiaconato && ministryConfig?.observations && (
           <div className="card border-l-4 border-indigo-400 bg-indigo-50/50">
             <div className="flex items-start gap-3">
               <span className="text-2xl shrink-0">📌</span>
@@ -196,75 +226,116 @@ export default function PublicBoard() {
           </div>
         )}
 
-        {/* ── Tabela de Escala ── */}
+        {/* Tabela */}
         <div className="card overflow-hidden p-0">
-          {/* Cabeçalho da tabela com imagem do ministério */}
           <div className={`${colors.header} text-white px-6 py-4 flex items-center justify-between`}>
             <div className="flex items-center gap-3">
-              {ministryConfig?.image ? (
-                <img src={ministryConfig.image} alt={ministry?.label} className="w-10 h-10 object-contain rounded-lg bg-white/10 p-1" />
-              ) : (
-                <span className="text-2xl">{ministry?.icon}</span>
-              )}
+              {ministryConfig?.image
+                ? <img src={ministryConfig.image} alt={ministry?.label} className="w-10 h-10 object-contain rounded-lg bg-white/10 p-1"/>
+                : <span className="text-2xl">{ministry?.icon}</span>}
               <div>
                 <h2 className="font-display text-xl font-bold">{ministry?.label}</h2>
                 <p className="text-white/70 text-sm">{periodLabel}</p>
               </div>
             </div>
-            <div className="text-white/70 text-sm">{filteredDates.length} datas</div>
+            <div className="text-white/70 text-sm">
+              {isDiaconato ? `${filteredWeeks.length} semanas` : `${filteredDates.length} datas`}
+            </div>
           </div>
 
-          {filteredDates.length === 0 ? (
-            <div className="py-16 text-center text-gray-400">
-              <p className="text-4xl mb-3">📅</p>
-              <p className="font-semibold">Nenhuma data neste período</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className={`${colors.bg} border-b ${colors.border}`}>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600 whitespace-nowrap w-28">Data</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600 w-24">Dia</th>
-                    {allFields.map(f => (
-                      <th key={f.id} className="px-4 py-3 text-left font-semibold text-gray-600">{f.label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredDates.map((d, idx) => {
-                    const entry = scheduleData[d.id] || {};
-                    const dayFields = getFieldsForDate(activeMinistry, d.dayOfWeek);
-                    const dayFieldIds = new Set(dayFields.map(f => f.id));
-                    return (
-                      <tr key={d.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-blue-50/40 transition-colors`}>
-                        <td className="px-4 py-3 font-semibold text-navy-700 whitespace-nowrap">
-                          {d.label.split(', ')[1] || d.label}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold
-                            ${d.dayOfWeek === 6 ? 'bg-amber-100 text-amber-800' :
-                              d.dayOfWeek === 0 ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                            {d.dayName}
-                          </span>
-                        </td>
-                        {allFields.map(f => (
-                          <td key={f.id} className={`px-4 py-3 ${!dayFieldIds.has(f.id) ? 'bg-gray-50' : ''}`}>
-                            {!dayFieldIds.has(f.id) ? (
-                              <span className="text-gray-300 text-xs">—</span>
-                            ) : entry[f.id] ? (
-                              <span className="font-medium text-gray-800">{entry[f.id]}</span>
-                            ) : (
-                              <span className="text-gray-300 italic text-xs">A definir</span>
-                            )}
+          {/* ── Tabela Diaconato (semanal) ── */}
+          {isDiaconato && (
+            filteredWeeks.length === 0 ? (
+              <div className="py-16 text-center text-gray-400">
+                <p className="text-4xl mb-3">📅</p>
+                <p className="font-semibold">Nenhuma semana neste período</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className={`${colors.bg} border-b ${colors.border}`}>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600 whitespace-nowrap w-44">Período</th>
+                      {ministry?.fields.map(f => (
+                        <th key={f.id} className="px-4 py-3 text-left font-semibold text-gray-600">{f.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredWeeks.map((week, idx) => {
+                      const entry = scheduleData[week.id] || {};
+                      return (
+                        <tr key={week.id} className={`${idx%2===0?'bg-white':'bg-gray-50/50'} hover:bg-amber-50/30 transition-colors`}>
+                          <td className="px-4 py-3 font-semibold text-amber-800 whitespace-nowrap text-sm">
+                            {week.label}
                           </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          {ministry?.fields.map(f => (
+                            <td key={f.id} className="px-4 py-3 text-gray-700">
+                              {entry[f.id]
+                                ? <span className="font-medium">{entry[f.id]}</span>
+                                : <span className="text-gray-300 italic text-xs">A definir</span>}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
+
+          {/* ── Tabela outros ministérios ── */}
+          {!isDiaconato && (
+            filteredDates.length === 0 ? (
+              <div className="py-16 text-center text-gray-400">
+                <p className="text-4xl mb-3">📅</p>
+                <p className="font-semibold">Nenhuma data neste período</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className={`${colors.bg} border-b ${colors.border}`}>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600 whitespace-nowrap w-28">Data</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600 w-24">Dia</th>
+                      {allFields.map(f => (
+                        <th key={f.id} className="px-4 py-3 text-left font-semibold text-gray-600">{f.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredDates.map((d, idx) => {
+                      const entry = scheduleData[d.id] || {};
+                      const dayFields = getFieldsForDate(activeMinistry, d.dayOfWeek);
+                      const dayFieldIds = new Set(dayFields.map(f => f.id));
+                      return (
+                        <tr key={d.id} className={`${idx%2===0?'bg-white':'bg-gray-50/50'} hover:bg-blue-50/40 transition-colors`}>
+                          <td className="px-4 py-3 font-semibold text-navy-700 whitespace-nowrap">
+                            {d.label.split(', ')[1] || d.label}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold
+                              ${d.dayOfWeek===6?'bg-amber-100 text-amber-800':d.dayOfWeek===0?'bg-indigo-100 text-indigo-800':'bg-emerald-100 text-emerald-800'}`}>
+                              {d.dayName}
+                            </span>
+                          </td>
+                          {allFields.map(f => (
+                            <td key={f.id} className={`px-4 py-3 ${!dayFieldIds.has(f.id)?'bg-gray-50':''}`}>
+                              {!dayFieldIds.has(f.id)
+                                ? <span className="text-gray-300 text-xs">—</span>
+                                : entry[f.id]
+                                  ? <span className="font-medium text-gray-800">{entry[f.id]}</span>
+                                  : <span className="text-gray-300 italic text-xs">A definir</span>}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
           )}
         </div>
 
