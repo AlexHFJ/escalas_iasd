@@ -11,6 +11,12 @@ const MONTHS_PT = [
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
 ];
 
+// Altura estimada de uma mini-tabela de recepção (por linha)
+const ROW_H    = 4.2;  // altura de cada linha de dados
+const HEAD_H   = 8.0;  // altura do cabeçalho da tabela
+const TITLE_H  = 8.0;  // altura do título do mês
+const GAP_H    = 4.0;  // espaço entre tabelas
+
 export async function generateSchedulePDF({
   churchName, ministryLabel, periodLabel,
   ministry, dates, scheduleData,
@@ -18,25 +24,20 @@ export async function generateSchedulePDF({
 }) {
   const isRecepcao = ministry?.id === 'recepcao';
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const pageW = doc.internal.pageSize.getWidth();  // 210mm
-  const pageH = doc.internal.pageSize.getHeight(); // 297mm
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
   const margin = 12;
 
   // ── Cabecalho ──────────────────────────────────────────────
   doc.setFillColor(30, 58, 95);
   doc.rect(0, 0, pageW, 42, 'F');
 
-  // Logo IASD — esquerda
   try { doc.addImage(ADVENTIST_LOGO_BASE64, 'PNG', margin - 2, 5, 30, 30); }
   catch (e) { console.warn('Erro logo:', e); }
 
-  // Imagem: Recepção usa imagem fixa (metade direita do cabeçalho)
-  // Outros ministérios usam upload do diretor (pequeno, canto direito)
   if (isRecepcao) {
-    try {
-      // Ocupa a metade direita do cabeçalho: de x=105 até x=208, altura 38px
-      doc.addImage(RECEPCAO_IMAGE_BASE64, 'JPEG', 105, 2, 103, 38);
-    } catch (e) { console.warn('Erro imagem recepcao:', e); }
+    try { doc.addImage(RECEPCAO_IMAGE_BASE64, 'JPEG', 105, 2, 103, 38); }
+    catch (e) { console.warn('Erro imagem recepcao:', e); }
   } else if (ministryImage) {
     try {
       const ext = ministryImage.startsWith('data:image/png') ? 'PNG' : 'JPEG';
@@ -44,7 +45,6 @@ export async function generateSchedulePDF({
     } catch (e) { console.warn('Erro imagem:', e); }
   }
 
-  // Textos do cabeçalho
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
@@ -85,33 +85,54 @@ export async function generateSchedulePDF({
   }
 
   // ══════════════════════════════════════════════════════════
-  // RECEPCAO: layout 2 colunas por mês, ultra-compacto
+  // RECEPCAO: cascata 2 colunas
   // ══════════════════════════════════════════════════════════
   if (isRecepcao) {
-    // Agrupa por mês
-    const groups = {};
+    // Agrupa por mês mantendo ordem
+    const groups = [];
     for (const d of dates) {
-      if (!groups[d.month]) groups[d.month] = { monthName: MONTHS_PT[d.month], dates: [] };
-      groups[d.month].dates.push(d);
+      let g = groups.find(x => x.month === d.month);
+      if (!g) { g = { month: d.month, monthName: MONTHS_PT[d.month], dates: [] }; groups.push(g); }
+      g.dates.push(d);
     }
 
-    // Largura de cada "mini-tabela" (2 colunas por página)
-    const colW = (pageW - margin * 2 - 6) / 2; // 6mm de gap entre colunas
-    let colIndex = 0; // 0 = esquerda, 1 = direita
-    let colY = startY;
-    let maxY = startY; // controla qual coluna é mais longa
+    const colW   = (pageW - margin * 2 - 6) / 2; // largura de cada coluna
+    const colX   = [margin, margin + colW + 6];   // X de início de cada coluna
+    const bottomY = pageH - 14;                   // limite inferior (acima do rodapé)
 
-    for (const [, group] of Object.entries(groups)) {
-      const x = colIndex === 0 ? margin : margin + colW + 6;
-      let y = colIndex === 0 ? colY : colY;
+    // Estima altura de uma tabela de mês
+    function estimateH(nRows) {
+      return TITLE_H + HEAD_H + nRows * ROW_H + GAP_H;
+    }
 
-      // Se ambas colunas usadas, avança para próxima linha
-      if (colIndex === 0) {
-        y = maxY;
-        colY = maxY;
+    let col    = 0;           // coluna atual (0=esq, 1=dir)
+    let curY   = startY;      // Y atual na coluna esquerda
+    let rightY = startY;      // Y atual na coluna direita
+
+    function getCurrentY() { return col === 0 ? curY : rightY; }
+    function setCurrentY(y) { if (col === 0) curY = y; else rightY = y; }
+
+    for (const group of groups) {
+      const tableH = estimateH(group.dates.length);
+      let y = getCurrentY();
+
+      // Se não cabe na coluna atual, muda para a próxima
+      if (y + tableH > bottomY) {
+        if (col === 0) {
+          col = 1;
+          y = rightY;
+        } else {
+          // Nova página
+          doc.addPage();
+          footer({ pageNumber: doc.internal.getNumberOfPages() });
+          col = 0; curY = 14; rightY = 14;
+          y = 14;
+        }
       }
 
-      // Título do mês
+      const x = colX[col];
+
+      // Título do mês centralizado na coluna
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(150, 50, 75);
@@ -121,8 +142,7 @@ export async function generateSchedulePDF({
       doc.line(x, y + 5.5, x + colW, y + 5.5);
       y += 7;
 
-      // Monta linhas da tabela para este mês
-      const head = [['Data', 'Dia', 'Rec. 1', 'Rec. 2']];
+      // Linhas da tabela
       const body = group.dates.map(d => {
         const entry = scheduleData[d.id] || {};
         const isSab = d.dayOfWeek === 6;
@@ -136,27 +156,19 @@ export async function generateSchedulePDF({
 
       doc.autoTable({
         startY: y,
-        head,
+        head: [['Data', 'Dia', 'Rec. 1', 'Rec. 2']],
         body,
         headStyles: {
-          fillColor: [180, 70, 95],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-          fontSize: 7,
-          halign: 'center',
-          cellPadding: 1.5,
-          lineWidth: 0.2,
+          fillColor: [180, 70, 95], textColor: [255, 255, 255],
+          fontStyle: 'bold', fontSize: 7, halign: 'center',
+          cellPadding: 1.5, lineWidth: 0.2,
         },
         bodyStyles: {
-          fontSize: 6.5,
-          textColor: [20, 20, 40],
-          cellPadding: 1.2,
-          lineColor: [210, 190, 200],
-          lineWidth: 0.15,
+          fontSize: 6.5, textColor: [20, 20, 40],
+          cellPadding: 1.2, lineColor: [210, 190, 200], lineWidth: 0.15,
         },
         alternateRowStyles: { fillColor: [255, 240, 245] },
-        tableLineColor: [200, 160, 175],
-        tableLineWidth: 0.2,
+        tableLineColor: [200, 160, 175], tableLineWidth: 0.2,
         tableWidth: colW,
         margin: { left: x, right: pageW - x - colW },
         columnStyles: {
@@ -168,21 +180,17 @@ export async function generateSchedulePDF({
         didDrawPage: footer,
       });
 
-      const tableBottom = doc.lastAutoTable.finalY + 4;
+      const newY = doc.lastAutoTable.finalY + GAP_H;
+      setCurrentY(newY);
 
-      if (colIndex === 0) {
-        maxY = tableBottom;
-        colIndex = 1;
-      } else {
-        maxY = Math.max(maxY, tableBottom);
-        colIndex = 0;
-      }
+      // Alterna coluna
+      col = col === 0 ? 1 : 0;
     }
 
     return doc.save('Escala_Recepcao_' + periodLabel.replace(/\s/g,'_') + '.pdf');
   }
 
-  // ── Estilos padrão para outros ministérios ─────────────────
+  // ── Estilos padrão ─────────────────────────────────────────
   const headStyles = {
     fillColor: [201, 152, 58], textColor: [255, 255, 255],
     fontStyle: 'bold', fontSize: 10, halign: 'center',
@@ -193,9 +201,7 @@ export async function generateSchedulePDF({
     cellPadding: 3.5, lineColor: [200, 210, 230], lineWidth: 0.25,
   };
 
-  // ══════════════════════════════════════════════════════════
-  // DIACONATO: semanal
-  // ══════════════════════════════════════════════════════════
+  // ── Diaconato semanal ──────────────────────────────────────
   if (ministry?.isWeekly) {
     const fields = ministry.fields || [];
     doc.autoTable({
@@ -215,9 +221,7 @@ export async function generateSchedulePDF({
     return doc.save('Escala_Diaconato_' + periodLabel.replace(/\s/g,'_') + '.pdf');
   }
 
-  // ══════════════════════════════════════════════════════════
-  // MUSICA e outros com campos por dia
-  // ══════════════════════════════════════════════════════════
+  // ── Musica e campos por dia ────────────────────────────────
   if (ministry?.fieldsByDay) {
     const allFields = ministry.fields;
     doc.autoTable({
@@ -241,9 +245,8 @@ export async function generateSchedulePDF({
       margin: { left: margin, right: margin },
       didDrawPage: footer,
     });
-
   } else {
-    // Sonoplastia e outros fixos
+    // Sonoplastia e outros
     const fields = ministry?.fields || [];
     doc.autoTable({
       startY,
