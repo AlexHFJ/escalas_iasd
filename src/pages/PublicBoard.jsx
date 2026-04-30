@@ -142,8 +142,8 @@ export default function PublicBoard() {
             </h1>
             <p className="text-blue-200 text-sm mt-0.5">Mural de Escalas de Ministérios</p>
           </div>
-          <a href="/login" className="text-blue-200 hover:text-white text-xs border border-blue-400/30 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-colors hidden sm:block shrink-0">
-            Área do Diretor →
+          <a href="/login" className="text-blue-200 hover:text-white text-xs border border-blue-400/30 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-colors shrink-0">
+            Diretor →
           </a>
         </div>
       </header>
