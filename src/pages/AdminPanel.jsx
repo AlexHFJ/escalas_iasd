@@ -154,7 +154,18 @@ function DirectorsManager() {
                     }}>
                       {MINISTRY_LIST.map(m=><option key={m.id} value={m.id}>{m.icon} {m.label}</option>)}
                     </select>
-                    <button onClick={async()=>{ if(!confirm('Remover?'))return; await deleteDoc(doc(db,'users',d.uid)); setDirectors(prev=>prev.filter(x=>x.uid!==d.uid)); }}
+                    <button onClick={async()=>{
+                      if(!confirm('Remover acesso deste diretor?')) return;
+                      try {
+                        await deleteDoc(doc(db,'users',d.uid));
+                        setDirectors(prev=>prev.filter(x=>x.uid!==d.uid));
+                        setMsg('✅ Diretor removido com sucesso!');
+                        setTimeout(()=>setMsg(''),3000);
+                      } catch(e) {
+                        console.error(e);
+                        setMsg('⚠️ Erro ao remover: ' + e.message);
+                      }
+                    }}
                       className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-lg">🗑️</button>
                   </>
                 )}
