@@ -75,6 +75,7 @@ export async function generateSchedulePDF({
   };
   function footer(data) {
     doc.setFontSize(7.5); doc.setTextColor(150, 150, 160);
+    doc.text('Desenvolvido por Alex Fujimori', margin, pageH - 8);
     doc.text(churchName + ' — Escala de ' + ministryLabel + ' — ' + periodLabel,
       pageW / 2, pageH - 8, { align: 'center' });
     doc.text('Pagina ' + data.pageNumber, pageW - margin, pageH - 8, { align: 'right' });
