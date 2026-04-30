@@ -1,26 +1,15 @@
-// ============================================================
-// CONFIGURAÇÃO DO FIREBASE
-// ============================================================
-// 1. Acesse https://console.firebase.google.com/
-// 2. Crie um novo projeto
-// 3. Adicione um app Web ao projeto
-// 4. Copie as configurações abaixo e substitua os valores
-// 5. Ative Authentication (Email/Senha) no console
-// 6. Ative o Firestore Database (modo produção ou teste)
-// ============================================================
-
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
-  apiKey: "COLE_SUA_API_KEY_AQUI",
-  authDomain: "SEU_PROJETO.firebaseapp.com",
-  projectId: "SEU_PROJETO_ID",
-  storageBucket: "SEU_PROJETO.appspot.com",
-  messagingSenderId: "SEU_SENDER_ID",
-  appId: "SEU_APP_ID"
+  apiKey: "AIzaSyD6b7hqX-D8BdogdOpxWokeSV3zQzEZqXY",
+  authDomain: "escalas-iasd-d5f5f.firebaseapp.com",
+  projectId: "escalas-iasd-d5f5f",
+  storageBucket: "escalas-iasd-d5f5f.firebasestorage.app",
+  messagingSenderId: "746944618600",
+  appId: "1:746944618600:web:3d7d28e04d1f89d0db5bdd"
 };
 
 const app = initializeApp(firebaseConfig);
