@@ -3,19 +3,12 @@ import 'jspdf-autotable';
 import { ADVENTIST_LOGO_BASE64 } from './adventistLogo';
 import { RECEPCAO_IMAGE_BASE64 } from './recepcaoImage';
 
-const DAY_NAME = { 0: 'Dom', 3: 'Qua', 6: 'Sab' };
+const DAY_NAME      = { 0: 'Dom', 3: 'Qua', 6: 'Sab' };
 const DAY_NAME_FULL = { 0: 'Domingo', 3: 'Quarta-feira', 6: 'Sabado' };
-
-const MONTHS_PT = [
+const MONTHS_PT     = [
   'Janeiro','Fevereiro','Marco','Abril','Maio','Junho',
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
 ];
-
-// Altura estimada de uma mini-tabela de recepção (por linha)
-const ROW_H    = 4.2;  // altura de cada linha de dados
-const HEAD_H   = 8.0;  // altura do cabeçalho da tabela
-const TITLE_H  = 8.0;  // altura do título do mês
-const GAP_H    = 4.0;  // espaço entre tabelas
 
 export async function generateSchedulePDF({
   churchName, ministryLabel, periodLabel,
@@ -23,7 +16,7 @@ export async function generateSchedulePDF({
   ministryImage, observations,
 }) {
   const isRecepcao = ministry?.id === 'recepcao';
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const doc  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 12;
@@ -56,16 +49,14 @@ export async function generateSchedulePDF({
   doc.setTextColor(180, 210, 255);
   doc.text(periodLabel, 46, 30);
   const today = new Date().toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' });
-  doc.setFontSize(6.5);
-  doc.setTextColor(150, 190, 240);
+  doc.setFontSize(6.5); doc.setTextColor(150, 190, 240);
   doc.text('Gerado em ' + today, isRecepcao ? 100 : pageW - margin, 38, { align: 'right' });
 
   let startY = 46;
 
   // ── Observacoes (nao-recepcao) ─────────────────────────────
   if (!isRecepcao && observations && observations.trim()) {
-    doc.setFillColor(237, 242, 255);
-    doc.setDrawColor(180, 200, 240);
+    doc.setFillColor(237, 242, 255); doc.setDrawColor(180, 200, 240);
     const obsLines = doc.splitTextToSize(observations, pageW - margin * 2 - 8);
     const obsH = obsLines.length * 5 + 12;
     doc.roundedRect(margin, startY, pageW - margin * 2, obsH, 2, 2, 'FD');
@@ -85,10 +76,11 @@ export async function generateSchedulePDF({
   }
 
   // ══════════════════════════════════════════════════════════
-  // RECEPCAO: cascata 2 colunas
+  // RECEPCAO: cada mês dividido ao meio — pt1 esq | pt2 dir
+  // Meses ficam empilhados verticalmente nesse formato
   // ══════════════════════════════════════════════════════════
   if (isRecepcao) {
-    // Agrupa por mês mantendo ordem
+    // Agrupa por mês
     const groups = [];
     for (const d of dates) {
       let g = groups.find(x => x.month === d.month);
@@ -96,54 +88,63 @@ export async function generateSchedulePDF({
       g.dates.push(d);
     }
 
-    const colW   = (pageW - margin * 2 - 6) / 2; // largura de cada coluna
-    const colX   = [margin, margin + colW + 6];   // X de início de cada coluna
-    const bottomY = pageH - 14;                   // limite inferior (acima do rodapé)
+    const gap    = 6;                              // gap horizontal entre colunas
+    const colW   = (pageW - margin * 2 - gap) / 2;
+    const colX   = [margin, margin + colW + gap];  // X de cada coluna
 
-    // Estima altura de uma tabela de mês
-    function estimateH(nRows) {
-      return TITLE_H + HEAD_H + nRows * ROW_H + GAP_H;
-    }
+    const headH  = 7.5;  // altura do cabeçalho da tabela
+    const rowH   = 4.0;  // altura estimada de cada linha
+    const titleH = 7.0;  // altura do título do mês
 
-    let col    = 0;           // coluna atual (0=esq, 1=dir)
-    let curY   = startY;      // Y atual na coluna esquerda
-    let rightY = startY;      // Y atual na coluna direita
+    let curY = startY; // Y atual (ambas colunas crescem juntas por mês)
 
-    function getCurrentY() { return col === 0 ? curY : rightY; }
-    function setCurrentY(y) { if (col === 0) curY = y; else rightY = y; }
+    const tableHeadStyles = {
+      fillColor: [180, 70, 95], textColor: [255, 255, 255],
+      fontStyle: 'bold', fontSize: 7, halign: 'center',
+      cellPadding: 1.5, lineWidth: 0.2,
+    };
+    const tableBodyStyles = {
+      fontSize: 6.5, textColor: [20, 20, 40],
+      cellPadding: 1.2, lineColor: [210, 190, 200], lineWidth: 0.15,
+    };
 
-    for (const group of groups) {
-      const tableH = estimateH(group.dates.length);
-      let y = getCurrentY();
-
-      // Se não cabe na coluna atual, muda para a próxima
-      if (y + tableH > bottomY) {
-        if (col === 0) {
-          col = 1;
-          y = rightY;
-        } else {
-          // Nova página
-          doc.addPage();
-          footer({ pageNumber: doc.internal.getNumberOfPages() });
-          col = 0; curY = 14; rightY = 14;
-          y = 14;
-        }
+    function drawMonthTable(x, y, rows, monthName, showTitle) {
+      // Título do mês centralizado na coluna
+      if (showTitle) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(150, 50, 75);
+        doc.text(monthName, x + colW / 2, y + 4, { align: 'center' });
+        doc.setDrawColor(180, 80, 100);
+        doc.setLineWidth(0.35);
+        doc.line(x, y + 5.5, x + colW, y + 5.5);
+        y += titleH;
       }
 
-      const x = colX[col];
+      doc.autoTable({
+        startY: y,
+        head: [['Data', 'Dia', 'Rec. 1', 'Rec. 2']],
+        body: rows,
+        headStyles: tableHeadStyles,
+        bodyStyles: tableBodyStyles,
+        alternateRowStyles: { fillColor: [255, 240, 245] },
+        tableLineColor: [200, 160, 175], tableLineWidth: 0.2,
+        tableWidth: colW,
+        margin: { left: x, right: pageW - x - colW },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: colW * 0.28, fontStyle: 'bold' },
+          1: { halign: 'center', cellWidth: colW * 0.20 },
+          2: { cellWidth: colW * 0.26 },
+          3: { cellWidth: colW * 0.26 },
+        },
+        didDrawPage: footer,
+      });
 
-      // Título do mês centralizado na coluna
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(150, 50, 75);
-      doc.text(group.monthName, x + colW / 2, y + 4, { align: 'center' });
-      doc.setDrawColor(180, 80, 100);
-      doc.setLineWidth(0.35);
-      doc.line(x, y + 5.5, x + colW, y + 5.5);
-      y += 7;
+      return doc.lastAutoTable.finalY;
+    }
 
-      // Linhas da tabela
-      const body = group.dates.map(d => {
+    for (const group of groups) {
+      const allRows = group.dates.map(d => {
         const entry = scheduleData[d.id] || {};
         const isSab = d.dayOfWeek === 6;
         return [
@@ -154,37 +155,25 @@ export async function generateSchedulePDF({
         ];
       });
 
-      doc.autoTable({
-        startY: y,
-        head: [['Data', 'Dia', 'Rec. 1', 'Rec. 2']],
-        body,
-        headStyles: {
-          fillColor: [180, 70, 95], textColor: [255, 255, 255],
-          fontStyle: 'bold', fontSize: 7, halign: 'center',
-          cellPadding: 1.5, lineWidth: 0.2,
-        },
-        bodyStyles: {
-          fontSize: 6.5, textColor: [20, 20, 40],
-          cellPadding: 1.2, lineColor: [210, 190, 200], lineWidth: 0.15,
-        },
-        alternateRowStyles: { fillColor: [255, 240, 245] },
-        tableLineColor: [200, 160, 175], tableLineWidth: 0.2,
-        tableWidth: colW,
-        margin: { left: x, right: pageW - x - colW },
-        columnStyles: {
-          0: { halign: 'center', cellWidth: colW * 0.28, fontStyle: 'bold' },
-          1: { halign: 'center', cellWidth: colW * 0.22 },
-          2: { cellWidth: colW * 0.25 },
-          3: { cellWidth: colW * 0.25 },
-        },
-        didDrawPage: footer,
-      });
+      // Divide ao meio — pt1 esquerda, pt2 direita
+      const half  = Math.ceil(allRows.length / 2);
+      const rowsL = allRows.slice(0, half);
+      const rowsR = allRows.slice(half);
 
-      const newY = doc.lastAutoTable.finalY + GAP_H;
-      setCurrentY(newY);
+      // Ambas as colunas começam no mesmo Y
+      const yStart = curY;
 
-      // Alterna coluna
-      col = col === 0 ? 1 : 0;
+      // Coluna esquerda — com título
+      const bottomL = drawMonthTable(colX[0], yStart, rowsL, group.monthName, true);
+
+      // Coluna direita — sem título (continuação do mesmo mês)
+      const yR = yStart + titleH; // alinha com onde a tabela esquerda começa (abaixo do título)
+      const bottomR = rowsR.length > 0
+        ? drawMonthTable(colX[1], yR, rowsR, group.monthName, false)
+        : yR;
+
+      // Próximo mês começa abaixo da maior das duas colunas + gap
+      curY = Math.max(bottomL, bottomR) + 5;
     }
 
     return doc.save('Escala_Recepcao_' + periodLabel.replace(/\s/g,'_') + '.pdf');
@@ -246,7 +235,6 @@ export async function generateSchedulePDF({
       didDrawPage: footer,
     });
   } else {
-    // Sonoplastia e outros
     const fields = ministry?.fields || [];
     doc.autoTable({
       startY,
