@@ -1,14 +1,22 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { ADVENTIST_LOGO_BASE64 } from './adventistLogo';
+import { RECEPCAO_IMAGE_BASE64 } from './recepcaoImage';
 
 const DAY_NAME = { 0: 'Domingo', 3: 'Quarta-feira', 6: 'Sabado' };
+
+const MONTHS_PT = [
+  'Janeiro','Fevereiro','Marco','Abril','Maio','Junho',
+  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
+];
 
 export async function generateSchedulePDF({
   churchName, ministryLabel, periodLabel,
   ministry, dates, scheduleData,
   ministryImage, observations,
 }) {
+  const isRecepcao = ministry?.id === 'recepcao';
+
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -21,10 +29,12 @@ export async function generateSchedulePDF({
   try { doc.addImage(ADVENTIST_LOGO_BASE64, 'PNG', margin - 2, 5, 30, 30); }
   catch (e) { console.warn('Erro logo:', e); }
 
-  if (ministryImage) {
+  // Imagem do ministério: Recepção usa a imagem fixa, outros usam upload do diretor
+  const imgToUse = isRecepcao ? RECEPCAO_IMAGE_BASE64 : ministryImage;
+  if (imgToUse) {
     try {
-      const ext = ministryImage.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-      doc.addImage(ministryImage, ext, pageW - margin - 28, 5, 28, 28);
+      const ext = imgToUse.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+      doc.addImage(imgToUse, ext, pageW - margin - 36, 3, 36, 34);
     } catch (e) { console.warn('Erro imagem:', e); }
   }
 
@@ -38,7 +48,7 @@ export async function generateSchedulePDF({
   doc.setFontSize(9);
   doc.setTextColor(180, 210, 255);
   doc.text(periodLabel, 46, 31);
-  const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const today = new Date().toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' });
   doc.setFontSize(7);
   doc.setTextColor(150, 190, 240);
   doc.text('Gerado em ' + today, pageW - margin, 38, { align: 'right' });
@@ -46,7 +56,7 @@ export async function generateSchedulePDF({
   let startY = 47;
 
   // ── Observacoes ─────────────────────────────────────────────
-  if (observations && observations.trim()) {
+  if (!isRecepcao && observations && observations.trim()) {
     doc.setFillColor(237, 242, 255);
     doc.setDrawColor(180, 200, 240);
     const obsLines = doc.splitTextToSize(observations, pageW - margin * 2 - 8);
@@ -73,15 +83,98 @@ export async function generateSchedulePDF({
     fontSize: 9.5, textColor: [20, 30, 50],
     cellPadding: 3.5, lineColor: [200, 210, 230], lineWidth: 0.25,
   };
+
+  // Estilos compactos para Recepção (cabe em 1 página)
+  const headStylesCompact = {
+    fillColor: [190, 80, 100], textColor: [255, 255, 255],
+    fontStyle: 'bold', fontSize: 8.5, halign: 'center',
+    cellPadding: 2.5, lineColor: [150, 60, 80], lineWidth: 0.3,
+  };
+  const bodyStylesCompact = {
+    fontSize: 8, textColor: [20, 30, 50],
+    cellPadding: 2, lineColor: [210, 200, 210], lineWidth: 0.2,
+  };
+
   function footer(data) {
-    doc.setFontSize(7.5); doc.setTextColor(150, 150, 160);
-    doc.text('Desenvolvido por Alex Fujimori', margin, pageH - 8);
+    doc.setFontSize(7); doc.setTextColor(150, 150, 160);
+    doc.text('Desenvolvido por Alex Fujimori', margin, pageH - 6);
     doc.text(churchName + ' — Escala de ' + ministryLabel + ' — ' + periodLabel,
-      pageW / 2, pageH - 8, { align: 'center' });
-    doc.text('Pagina ' + data.pageNumber, pageW - margin, pageH - 8, { align: 'right' });
+      pageW / 2, pageH - 6, { align: 'center' });
+    doc.text('Pagina ' + data.pageNumber, pageW - margin, pageH - 6, { align: 'right' });
   }
 
-  // ── Diaconato: tabela semanal ──────────────────────────────
+  // ══════════════════════════════════════════════════════════
+  // RECEPCAO: agrupado por mês, compacto, 1 página
+  // ══════════════════════════════════════════════════════════
+  if (isRecepcao) {
+    // Agrupa datas por mês
+    const groups = {};
+    for (const d of dates) {
+      if (!groups[d.month]) groups[d.month] = { monthName: MONTHS_PT[d.month], dates: [] };
+      groups[d.month].dates.push(d);
+    }
+
+    const fields = ministry?.fieldsByDay
+      ? ministry.fields
+      : ministry?.fields || [];
+
+    let firstGroup = true;
+
+    for (const [, group] of Object.entries(groups)) {
+      // Título do mês
+      if (!firstGroup) startY += 3;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(190, 80, 100);
+      doc.text(group.monthName, pageW / 2, startY + 4, { align: 'center' });
+
+      // Linha decorativa abaixo do título
+      doc.setDrawColor(190, 80, 100);
+      doc.setLineWidth(0.4);
+      doc.line(margin, startY + 6, pageW - margin, startY + 6);
+      startY += 5;
+
+      const head = [['Data', 'Dia', ...fields.map(f => f.label)]];
+      const body = group.dates.map(d => {
+        const entry = scheduleData[d.id] || {};
+        const dayFieldIds = new Set(
+          (ministry?.fieldsByDay ? (ministry.fieldsByDay[d.dayOfWeek] || []) : fields).map(f => f.id)
+        );
+        return [
+          d.label.split(', ')[1] || d.label,
+          DAY_NAME[d.dayOfWeek] || '',
+          ...fields.map(f => dayFieldIds.has(f.id) ? (entry[f.id] || '—') : ''),
+        ];
+      });
+
+      doc.autoTable({
+        startY,
+        head,
+        body,
+        headStyles: headStylesCompact,
+        bodyStyles: bodyStylesCompact,
+        alternateRowStyles: { fillColor: [255, 240, 245] },
+        tableLineColor: [210, 180, 190],
+        tableLineWidth: 0.2,
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 22, fontStyle: 'bold' },
+          1: { halign: 'center', cellWidth: 28 },
+        },
+        margin: { left: margin, right: margin },
+        didDrawPage: footer,
+      });
+
+      startY = doc.lastAutoTable.finalY + 4;
+      firstGroup = false;
+    }
+
+    return doc.save('Escala_Recepcao_' + periodLabel.replace(/\s/g,'_') + '.pdf');
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // DIACONATO: semanal
+  // ══════════════════════════════════════════════════════════
   if (ministry?.isWeekly) {
     const fields = ministry.fields || [];
     const head = [['Periodo (Dom ao Sab)', ...fields.map(f => f.label)]];
@@ -91,7 +184,7 @@ export async function generateSchedulePDF({
     });
     doc.autoTable({
       startY, head, body, headStyles, bodyStyles,
-      alternateRowStyles: { fillColor: [255, 248, 230] }, // tom âmbar claro
+      alternateRowStyles: { fillColor: [255, 248, 230] },
       tableLineColor: [200, 180, 130], tableLineWidth: 0.3,
       columnStyles: { 0: { halign: 'center', cellWidth: 50, fontStyle: 'bold' } },
       margin: { left: margin, right: margin },
@@ -100,7 +193,9 @@ export async function generateSchedulePDF({
     return doc.save('Escala_Diaconato_' + periodLabel.replace(/\s/g,'_') + '.pdf');
   }
 
-  // ── Musica e Recepcao: tabela com campos por dia ───────────
+  // ══════════════════════════════════════════════════════════
+  // MUSICA e outros com campos por dia
+  // ══════════════════════════════════════════════════════════
   if (ministry?.fieldsByDay) {
     const allFields = ministry.fields;
     const head = [['Data', 'Dia', ...allFields.map(f => f.label)]];
@@ -126,7 +221,7 @@ export async function generateSchedulePDF({
     });
 
   } else {
-    // ── Outros ministerios ─────────────────────────────────────
+    // ── Sonoplastia e outros fixos ─────────────────────────
     const fields = ministry?.fields || [];
     const head = [['Data', 'Dia', ...fields.map(f => f.label)]];
     const body = dates.map(d => {
