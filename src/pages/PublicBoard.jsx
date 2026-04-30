@@ -339,8 +339,9 @@ export default function PublicBoard() {
           )}
         </div>
 
-        <footer className="text-center text-gray-400 text-xs pb-8">
-          {config?.churchName || 'Igreja Adventista'} • Sistema de Escalas
+        <footer className="text-center text-gray-400 text-xs pb-8 space-y-1">
+          <p>{config?.churchName || 'Igreja Adventista'} • Sistema de Escalas</p>
+          <p className="text-gray-300">Desenvolvido por <span className="font-semibold text-gray-400">Alex Fujimori</span></p>
         </footer>
       </div>
     </div>
