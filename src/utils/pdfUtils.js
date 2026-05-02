@@ -100,27 +100,28 @@ export async function generateSchedulePDF({
 
     const tableHeadStyles = {
       fillColor: [180, 70, 95], textColor: [255, 255, 255],
-      fontStyle: 'bold', fontSize: 7, halign: 'center',
-      cellPadding: 1.5, lineWidth: 0.2,
+      fontStyle: 'bold', fontSize: 9, halign: 'center',
+      cellPadding: 2.5, lineWidth: 0.2,
     };
     const tableBodyStyles = {
-      fontSize: 6.5, textColor: [20, 20, 40],
-      cellPadding: 1.2, lineColor: [210, 190, 200], lineWidth: 0.15,
+      fontSize: 8.5, textColor: [20, 20, 40],
+      cellPadding: 2.0, lineColor: [210, 190, 200], lineWidth: 0.15,
     };
 
-    function drawMonthTable(x, y, rows, monthName, showTitle) {
-      // Título do mês centralizado na coluna
-      if (showTitle) {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
-        doc.setTextColor(150, 50, 75);
-        doc.text(monthName, x + colW / 2, y + 4, { align: 'center' });
-        doc.setDrawColor(180, 80, 100);
-        doc.setLineWidth(0.35);
-        doc.line(x, y + 5.5, x + colW, y + 5.5);
-        y += titleH;
-      }
+    // Desenha título centralizado entre as DUAS colunas
+    function drawMonthTitle(y, monthName) {
+      const totalW = colW * 2 + gap;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(150, 50, 75);
+      doc.text(monthName, margin + totalW / 2, y + 5, { align: 'center' });
+      doc.setDrawColor(180, 80, 100);
+      doc.setLineWidth(0.4);
+      doc.line(margin, y + 6.5, margin + totalW, y + 6.5);
+    }
 
+    // Desenha mini-tabela em uma coluna específica
+    function drawMonthTable(x, y, rows) {
       doc.autoTable({
         startY: y,
         head: [['Data', 'Dia', 'Rec. 1', 'Rec. 2']],
@@ -139,7 +140,6 @@ export async function generateSchedulePDF({
         },
         didDrawPage: footer,
       });
-
       return doc.lastAutoTable.finalY;
     }
 
@@ -160,20 +160,20 @@ export async function generateSchedulePDF({
       const rowsL = allRows.slice(0, half);
       const rowsR = allRows.slice(half);
 
-      // Ambas as colunas começam no mesmo Y
-      const yStart = curY;
+      // Título centralizado entre as duas colunas
+      drawMonthTitle(curY, group.monthName);
+      const tableY = curY + titleH + 1;
 
-      // Coluna esquerda — com título
-      const bottomL = drawMonthTable(colX[0], yStart, rowsL, group.monthName, true);
+      // Coluna esquerda
+      const bottomL = drawMonthTable(colX[0], tableY, rowsL);
 
-      // Coluna direita — sem título (continuação do mesmo mês)
-      const yR = yStart + titleH; // alinha com onde a tabela esquerda começa (abaixo do título)
+      // Coluna direita (mesmo Y de início, sem título)
       const bottomR = rowsR.length > 0
-        ? drawMonthTable(colX[1], yR, rowsR, group.monthName, false)
-        : yR;
+        ? drawMonthTable(colX[1], tableY, rowsR)
+        : tableY;
 
       // Próximo mês começa abaixo da maior das duas colunas + gap
-      curY = Math.max(bottomL, bottomR) + 5;
+      curY = Math.max(bottomL, bottomR) + 6;
     }
 
     return doc.save('Escala_Recepcao_' + periodLabel.replace(/\s/g,'_') + '.pdf');
