@@ -82,6 +82,67 @@ export default function PublicBoard() {
     return `${periods[selectedPeriod]?.label} de ${selectedYear}`;
   }, [selectedPeriodType, selectedPeriod, selectedYear]);
 
+  // ── Próxima data / "ir para hoje" ───────────────────────────
+  // Apenas visual: não lê nem grava nada no banco de dados.
+  const today = useMemo(() => {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return t;
+  }, []);
+
+  // O destaque só aparece quando o período exibido contém o mês atual
+  const isCurrentPeriod = useMemo(() => {
+    const periods = selectedPeriodType === 'quarter' ? QUARTERS : BIMESTERS;
+    const period = periods[selectedPeriod];
+    if (!period) return false;
+    return selectedYear === today.getFullYear() && period.months.includes(today.getMonth());
+  }, [selectedPeriodType, selectedPeriod, selectedYear, today]);
+
+  const nextTarget = useMemo(() => {
+    if (!isCurrentPeriod) return null;
+    if (isDiaconato) {
+      const w = filteredWeeks.find(w => w.endDate >= today);
+      if (!w) return null;
+      return { id: w.id, badge: w.startDate <= today ? 'SEMANA ATUAL' : 'PRÓXIMA', button: w.startDate <= today ? 'Ir para a semana atual' : 'Ir para a próxima data' };
+    }
+    const d = filteredDates.find(d => d.date >= today);
+    if (!d) return null;
+    const isToday = d.date.getTime() === today.getTime();
+    return { id: d.id, badge: isToday ? 'HOJE' : 'PRÓXIMA', button: isToday ? 'Ir para hoje' : 'Ir para a próxima data' };
+  }, [isCurrentPeriod, isDiaconato, filteredWeeks, filteredDates, today]);
+
+  const nextTargetId = nextTarget?.id || null;
+
+  const [jumpDismissed, setJumpDismissed] = useState(false);
+  const [targetVisible, setTargetVisible] = useState(false);
+
+  // Ao trocar de ministério/período/mês, o botão volta a aparecer
+  useEffect(() => {
+    setJumpDismissed(false);
+  }, [activeMinistry, selectedPeriodType, selectedPeriod, selectedYear, filterMonth]);
+
+  // Se a linha de destino já está na tela, o botão não é necessário
+  useEffect(() => {
+    setTargetVisible(false);
+    if (!nextTargetId || loading) return;
+    const el = document.getElementById('row-' + nextTargetId);
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setTargetVisible(entry.isIntersecting),
+      { threshold: 0.5 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [nextTargetId, loading, activeMinistry, selectedPeriodType, selectedPeriod, selectedYear, filterMonth]);
+
+  function goToNext() {
+    const el = document.getElementById('row-' + nextTargetId);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setJumpDismissed(true);
+  }
+
+  const showJumpButton = !!nextTargetId && !jumpDismissed && !targetVisible;
+
   // Carrega escala do Firestore
   useEffect(() => {
     const scheduleId = `${activeMinistry}_${selectedPeriodType}${selectedPeriod}_${selectedYear}`;
@@ -264,10 +325,17 @@ export default function PublicBoard() {
                   <tbody className="divide-y divide-gray-100">
                     {filteredWeeks.map((week, idx) => {
                       const entry = scheduleData[week.id] || {};
+                      const isNext = week.id === nextTargetId;
                       return (
-                        <tr key={week.id} className={`${idx%2===0?'bg-white':'bg-gray-50/50'} hover:bg-amber-50/30 transition-colors`}>
-                          <td className="px-4 py-3 font-semibold text-amber-800 whitespace-nowrap text-sm">
-                            {week.label}
+                        <tr key={week.id} id={`row-${week.id}`}
+                          className={`${isNext ? 'bg-red-50' : idx%2===0?'bg-white':'bg-gray-50/50 hover:bg-amber-50/30'} transition-colors`}>
+                          <td className={`px-4 py-3 font-semibold text-amber-800 whitespace-nowrap text-sm border-l-4 ${isNext ? 'border-red-500' : 'border-transparent'}`}>
+                            <div>{week.label}</div>
+                            {isNext && (
+                              <div className="mt-0.5">
+                                <span className="inline-block text-[10px] font-bold tracking-wide bg-red-100 text-red-700 px-1.5 py-0.5 rounded">{nextTarget.badge}</span>
+                              </div>
+                            )}
                           </td>
                           {ministry?.fields.map(f => (
                             <td key={f.id} className="px-4 py-3 text-gray-700">
@@ -310,9 +378,15 @@ export default function PublicBoard() {
                       const dayFields = getFieldsForDate(activeMinistry, d.dayOfWeek);
                       const dayFieldIds = new Set(dayFields.map(f => f.id));
                       return (
-                        <tr key={d.id} className={`${idx%2===0?'bg-white':'bg-gray-50/50'} hover:bg-blue-50/40 transition-colors`}>
-                          <td className="px-4 py-3 font-semibold text-navy-700 whitespace-nowrap">
-                            {d.label.split(', ')[1] || d.label}
+                        <tr key={d.id} id={`row-${d.id}`}
+                          className={`${d.id === nextTargetId ? 'bg-red-50' : idx%2===0?'bg-white':'bg-gray-50/50 hover:bg-blue-50/40'} transition-colors`}>
+                          <td className={`px-4 py-3 font-semibold text-navy-700 whitespace-nowrap border-l-4 ${d.id === nextTargetId ? 'border-red-500' : 'border-transparent'}`}>
+                            <div>{d.label.split(', ')[1] || d.label}</div>
+                            {d.id === nextTargetId && (
+                              <div className="mt-0.5">
+                                <span className="inline-block text-[10px] font-bold tracking-wide bg-red-100 text-red-700 px-1.5 py-0.5 rounded">{nextTarget.badge}</span>
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold
@@ -344,6 +418,16 @@ export default function PublicBoard() {
           <p className="text-gray-300">Desenvolvido por <span className="font-semibold text-gray-400">Alex Fujimori</span></p>
         </footer>
       </div>
+
+      {/* Botão flutuante: leva até a data mais próxima e some após o clique */}
+      {showJumpButton && (
+        <button
+          onClick={goToNext}
+          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white text-sm font-semibold px-4 py-3 rounded-full shadow-lg transition-all fade-in"
+        >
+          <span>📍</span> {nextTarget.button}
+        </button>
+      )}
     </div>
   );
 }
