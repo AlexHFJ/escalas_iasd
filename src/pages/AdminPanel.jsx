@@ -49,7 +49,7 @@ function ChurchSettings({ config, onSave }) {
             onChange={e => setForm(prev => ({ ...prev, churchName: e.target.value }))}
             placeholder="Ex: IASD Central de Paranavaí" />
         </div>
-        <button onClick={handleSave} className="btn-primary">{saved ? '✅ Salvo!' : '💾 Salvar'}</button>
+        <button title="Salvar o nome da igreja" onClick={handleSave} className="btn-primary">{saved ? '✅ Salvo!' : '💾 Salvar'}</button>
       </div>
     </div>
   );
@@ -71,7 +71,7 @@ function MembersManager({ ministryId, members, onSave }) {
       <textarea className="input-field resize-none font-mono text-sm" rows={12} value={text}
         onChange={e => setText(e.target.value)} placeholder={"João da Silva\nMaria Oliveira"} />
       <div className="flex items-center gap-3 mt-3">
-        <button onClick={handleSave} className="btn-primary">{saved ? '✅ Salvo!' : '💾 Salvar Lista'}</button>
+        <button title="Salvar a lista de voluntários deste ministério" onClick={handleSave} className="btn-primary">{saved ? '✅ Salvo!' : '💾 Salvar Lista'}</button>
         <span className="text-gray-400 text-sm">{text.split('\n').filter(l => l.trim()).length} membros</span>
       </div>
     </div>
@@ -127,7 +127,7 @@ function DirectorsManager() {
           </div>
         </div>
         <div className="flex items-center gap-4 mt-4">
-          <button onClick={handleAdd} disabled={loading} className="btn-primary flex items-center gap-2">
+          <button title="Criar a conta do diretor, com acesso apenas ao ministério escolhido" onClick={handleAdd} disabled={loading} className="btn-primary flex items-center gap-2">
             {loading ? <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"/>Criando...</> : '➕ Criar Diretor'}
           </button>
           {msg && <span className="text-sm text-gray-600">{msg}</span>}
@@ -154,7 +154,7 @@ function DirectorsManager() {
                     }}>
                       {MINISTRY_LIST.map(m=><option key={m.id} value={m.id}>{m.icon} {m.label}</option>)}
                     </select>
-                    <button onClick={async()=>{
+                    <button title="Remover o acesso deste diretor" onClick={async()=>{
                       if(!confirm('Remover acesso deste diretor?')) return;
                       try {
                         await deleteDoc(doc(db,'users',d.uid));
@@ -386,12 +386,12 @@ function DiaconatoEditor({ members, config }) {
             </select>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={()=>setShowAutoFill(true)} disabled={!members.length}
+            <button onClick={()=>setShowAutoFill(true)} disabled={!members.length} title={members.length ? 'Preencher automaticamente, distribuindo os membros de forma igualitária' : 'Cadastre os membros na aba Membros para usar o preenchimento automático'}
               className="btn-outline flex items-center gap-1.5 text-sm whitespace-nowrap">✨ Auto-preencher</button>
-            <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2 whitespace-nowrap">
+            <button title="Salvar as alterações — o mural público só é atualizado depois de salvar" onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2 whitespace-nowrap">
               {saving?<><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"/>Salvando...</>:saved?'✅ Salvo!':'💾 Salvar'}
             </button>
-            <button onClick={handlePDF} disabled={generatingPDF||!filteredWeeks.length}
+            <button onClick={handlePDF} disabled={generatingPDF||!filteredWeeks.length} title="Gerar o PDF desta escala para imprimir"
               className="btn-gold flex items-center gap-2 whitespace-nowrap">
               {generatingPDF?'...':'📄 PDF'}
             </button>
@@ -414,7 +414,7 @@ function DiaconatoEditor({ members, config }) {
               </span>
             </label>
             <p className="text-gray-400 text-xs mt-1.5">PNG ou JPG • Máx. 500KB</p>
-            {ministryImage && <button onClick={()=>setMinistryImage('')} className="text-red-400 text-xs mt-1 hover:text-red-600">Remover</button>}
+            {ministryImage && <button onClick={()=>setMinistryImage('')} title="Remover a imagem deste ministério (clique em Salvar para confirmar)" className="text-red-400 text-xs mt-1 hover:text-red-600">Remover</button>}
           </div>
         </div>
       </div>
@@ -429,7 +429,7 @@ function DiaconatoEditor({ members, config }) {
               <p className="text-white/70 text-sm">{periodLabel} — {filteredWeeks.length} semanas</p>
             </div>
           </div>
-          <button onClick={handleClearAll} disabled={clearAllStep===2||!filteredWeeks.length}
+          <button onClick={handleClearAll} disabled={clearAllStep===2||!filteredWeeks.length} title={clearAllStep===1 ? 'Clique novamente para confirmar a limpeza' : 'Apagar todos os nomes deste período (pede confirmação; depois clique em Salvar)'}
             className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all
               ${clearAllStep===0?'bg-white/10 hover:bg-red-500/80 text-white/70 hover:text-white':
                 clearAllStep===1?'bg-red-500 text-white animate-pulse':'bg-green-500 text-white'}`}>
@@ -480,7 +480,7 @@ function DiaconatoEditor({ members, config }) {
                         );
                       })}
                       <td className="px-2 py-2 text-center">
-                        <button onClick={()=>clearWeek(week.id)} title="Limpar semana"
+                        <button onClick={()=>clearWeek(week.id)} title="Limpar os nomes desta semana"
                           className={`w-6 h-6 rounded-full text-xs font-bold transition-all flex items-center justify-center mx-auto
                             ${hasAny?'bg-red-100 text-red-500 hover:bg-red-500 hover:text-white':'opacity-0 group-hover:opacity-30 bg-gray-100 text-gray-400 cursor-default'}`}>
                           ✕
@@ -504,10 +504,10 @@ function DiaconatoEditor({ members, config }) {
               Distribui os <strong>{members.length} membros</strong> igualmente entre as <strong>{weeks.length} semanas</strong>, sem repetir no mesmo período.
             </p>
             <div className="flex gap-3">
-              <button onClick={()=>handleAutoFill(false)} className="btn-primary flex-1">Preencher só vazios</button>
-              <button onClick={()=>handleAutoFill(true)} className="btn-outline flex-1">Substituir tudo</button>
+              <button onClick={()=>handleAutoFill(false)} title="Mantém os nomes já escolhidos e preenche apenas os campos vazios" className="btn-primary flex-1">Preencher só vazios</button>
+              <button onClick={()=>handleAutoFill(true)} title="Apaga o que já está preenchido e refaz toda a distribuição" className="btn-outline flex-1">Substituir tudo</button>
             </div>
-            <button onClick={()=>setShowAutoFill(false)} className="w-full mt-3 text-gray-400 text-sm hover:text-gray-600">Cancelar</button>
+            <button onClick={()=>setShowAutoFill(false)} title="Fechar sem alterar nada" className="w-full mt-3 text-gray-400 text-sm hover:text-gray-600">Cancelar</button>
           </div>
         </div>
       )}
@@ -656,11 +656,11 @@ function ScheduleEditor({ ministryId, members, config }) {
             </select>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={()=>setShowAutoFillModal(true)} disabled={!members.length} className="btn-outline flex items-center gap-1.5 text-sm whitespace-nowrap">✨ Auto-preencher</button>
-            <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2 whitespace-nowrap">
+            <button onClick={()=>setShowAutoFillModal(true)} disabled={!members.length} title={members.length ? 'Preencher automaticamente, distribuindo os membros de forma igualitária' : 'Cadastre os membros na aba Membros para usar o preenchimento automático'} className="btn-outline flex items-center gap-1.5 text-sm whitespace-nowrap">✨ Auto-preencher</button>
+            <button title="Salvar as alterações — o mural público só é atualizado depois de salvar" onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2 whitespace-nowrap">
               {saving?<><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"/>Salvando...</>:saved?'✅ Salvo!':'💾 Salvar'}
             </button>
-            <button onClick={handlePDF} disabled={generatingPDF||!filteredDates.length} className="btn-gold flex items-center gap-2 whitespace-nowrap">
+            <button onClick={handlePDF} disabled={generatingPDF||!filteredDates.length} title="Gerar o PDF desta escala para imprimir" className="btn-gold flex items-center gap-2 whitespace-nowrap">
               {generatingPDF?'...':'📄 PDF'}
             </button>
           </div>
@@ -682,7 +682,7 @@ function ScheduleEditor({ ministryId, members, config }) {
                   <span className="btn-outline text-xs inline-flex items-center gap-1.5 cursor-pointer">{uploadingImg?'Carregando...':'📁 Selecionar'}</span>
                 </label>
                 <p className="text-gray-400 text-xs mt-1.5">PNG ou JPG • Máx. 500KB</p>
-                {ministryImage && <button onClick={()=>setMinistryImage('')} className="text-red-400 text-xs mt-1 hover:text-red-600">Remover</button>}
+                {ministryImage && <button onClick={()=>setMinistryImage('')} title="Remover a imagem deste ministério (clique em Salvar para confirmar)" className="text-red-400 text-xs mt-1 hover:text-red-600">Remover</button>}
               </div>
             </div>
           </div>
@@ -705,7 +705,7 @@ function ScheduleEditor({ ministryId, members, config }) {
               <p className="text-white/70 text-sm">{periodLabel} — {filteredDates.length} datas</p>
             </div>
           </div>
-          <button onClick={handleClearAll} disabled={clearAllStep===2||!filteredDates.length}
+          <button onClick={handleClearAll} disabled={clearAllStep===2||!filteredDates.length} title={clearAllStep===1 ? 'Clique novamente para confirmar a limpeza' : 'Apagar todos os nomes deste período (pede confirmação; depois clique em Salvar)'}
             className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all
               ${clearAllStep===0?'bg-white/10 hover:bg-red-500/80 text-white/70 hover:text-white':
                 clearAllStep===1?'bg-red-500 text-white animate-pulse':'bg-green-500 text-white'}`}>
@@ -757,7 +757,7 @@ function ScheduleEditor({ ministryId, members, config }) {
                         );
                       })}
                       <td className="px-2 py-2 text-center">
-                        <button onClick={()=>clearDate(d.id)} title="Limpar data"
+                        <button onClick={()=>clearDate(d.id)} title="Limpar os nomes desta data"
                           className={`w-6 h-6 rounded-full text-xs font-bold transition-all flex items-center justify-center mx-auto
                             ${hasAny?'bg-red-100 text-red-500 hover:bg-red-500 hover:text-white':'opacity-0 group-hover:opacity-30 bg-gray-100 text-gray-400 cursor-default'}`}>✕</button>
                       </td>
@@ -778,10 +778,10 @@ function ScheduleEditor({ ministryId, members, config }) {
               Distribui os <strong>{members.length} membros</strong> igualmente entre as <strong>{dates.length} datas</strong>, sem repetir no mesmo dia.
             </p>
             <div className="flex gap-3">
-              <button onClick={()=>handleAutoFill(false)} className="btn-primary flex-1">Preencher só vazios</button>
-              <button onClick={()=>handleAutoFill(true)} className="btn-outline flex-1">Substituir tudo</button>
+              <button onClick={()=>handleAutoFill(false)} title="Mantém os nomes já escolhidos e preenche apenas os campos vazios" className="btn-primary flex-1">Preencher só vazios</button>
+              <button onClick={()=>handleAutoFill(true)} title="Apaga o que já está preenchido e refaz toda a distribuição" className="btn-outline flex-1">Substituir tudo</button>
             </div>
-            <button onClick={()=>setShowAutoFillModal(false)} className="w-full mt-3 text-gray-400 text-sm hover:text-gray-600">Cancelar</button>
+            <button onClick={()=>setShowAutoFillModal(false)} title="Fechar sem alterar nada" className="w-full mt-3 text-gray-400 text-sm hover:text-gray-600">Cancelar</button>
           </div>
         </div>
       )}
@@ -841,7 +841,7 @@ export default function AdminPanel() {
         <p className="text-4xl mb-4">⏳</p>
         <h2 className="font-display text-xl font-bold text-navy-700 mb-2">Acesso Pendente</h2>
         <p className="text-gray-500 text-sm mb-4">Seu acesso ainda não foi configurado pelo administrador.</p>
-        <button onClick={handleLogout} className="btn-outline">Sair</button>
+        <button title="Encerrar a sessão" onClick={handleLogout} className="btn-outline">Sair</button>
       </div>
     </div>
   );
@@ -858,9 +858,9 @@ export default function AdminPanel() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <a href="/" target="_blank" className="text-blue-300 hover:text-white text-xs hidden sm:block">Ver mural ↗</a>
+            <a href="/" target="_blank" title="Abrir o mural público em uma nova aba" className="text-blue-300 hover:text-white text-xs hidden sm:block">Ver mural ↗</a>
             <span className="text-gray-400 text-xs hidden sm:block">{userRole?.name||user?.email}</span>
-            <button onClick={handleLogout} className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-lg">Sair</button>
+            <button title="Encerrar a sessão e sair do painel" onClick={handleLogout} className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-lg">Sair</button>
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-4 flex gap-1 border-t border-white/10">
@@ -869,7 +869,7 @@ export default function AdminPanel() {
             {id:'members',icon:'👥',label:'Membros'},
             ...(isAdmin?[{id:'directors',icon:'🔐',label:'Diretores'},{id:'settings',icon:'⚙️',label:'Configurações'}]:[]),
           ].map(tab=>(
-            <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
+            <button key={tab.id} onClick={()=>setActiveTab(tab.id)} title={{schedule:'Montar e editar as escalas',members:'Cadastrar os voluntários de cada ministério',directors:'Criar e gerenciar os diretores',settings:'Alterar o nome da igreja'}[tab.id]}
               className={`flex items-center gap-1.5 px-4 py-3 text-sm font-semibold border-b-2 transition-all
                 ${activeTab===tab.id?'border-gold-400 text-white':'border-transparent text-blue-300 hover:text-white'}`}>
               <span>{tab.icon}</span> {tab.label}
@@ -884,7 +884,7 @@ export default function AdminPanel() {
             {visibleMinistries.map(m=>{
               const mc=COLOR_MAP[m.color]; const active=activeMinistry===m.id;
               return (
-                <button key={m.id} onClick={()=>setActiveMinistry(m.id)}
+                <button key={m.id} onClick={()=>setActiveMinistry(m.id)} title={`Selecionar o ministério de ${m.label}`}
                   className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all
                     ${active?`${mc.tab} shadow-md`:'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}>
                   <span>{m.icon}</span> {m.label}
