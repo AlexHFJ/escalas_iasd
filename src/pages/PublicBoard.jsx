@@ -203,7 +203,7 @@ export default function PublicBoard() {
             </h1>
             <p className="text-blue-200 text-sm mt-0.5">Mural de Escalas de Ministérios</p>
           </div>
-          <a href="/login" className="text-blue-200 hover:text-white text-xs border border-blue-400/30 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-colors shrink-0">
+          <a href="/login" title="Entrar na área restrita dos diretores (requer login)" className="text-blue-200 hover:text-white text-xs border border-blue-400/30 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-colors shrink-0">
             Diretor →
           </a>
         </div>
@@ -247,7 +247,7 @@ export default function PublicBoard() {
                 {availableMonths.map(m => <option key={m} value={m}>{MONTHS_PT[m]}</option>)}
               </select>
             </div>
-            <button onClick={handlePDF}
+            <button onClick={handlePDF} title="Baixar a escala selecionada em PDF, pronta para imprimir"
               disabled={generatingPDF || (isDiaconato ? filteredWeeks.length === 0 : filteredDates.length === 0)}
               className="btn-gold flex items-center gap-2 whitespace-nowrap">
               {generatingPDF
@@ -263,7 +263,7 @@ export default function PublicBoard() {
             const mc = COLOR_MAP[m.color];
             const active = activeMinistry === m.id;
             return (
-              <button key={m.id} onClick={() => { setActiveMinistry(m.id); setFilterMonth('all'); }}
+              <button key={m.id} onClick={() => { setActiveMinistry(m.id); setFilterMonth('all'); }} title={`Ver a escala de ${m.label}`}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200
                   ${active ? `${mc.tab} shadow-md scale-105` : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}>
                 <span>{m.icon}</span> {m.label}
@@ -422,7 +422,7 @@ export default function PublicBoard() {
       {/* Botão flutuante: leva até a data mais próxima e some após o clique */}
       {showJumpButton && (
         <button
-          onClick={goToNext}
+          onClick={goToNext} title="Rolar a página até a data mais próxima"
           className="fixed bottom-5 right-5 z-50 flex items-center gap-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white text-sm font-semibold px-4 py-3 rounded-full shadow-lg transition-all fade-in"
         >
           <span>📍</span> {nextTarget.button}
