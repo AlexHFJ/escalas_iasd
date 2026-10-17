@@ -10,13 +10,49 @@ const MONTHS_PT     = [
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
 ];
 
+// ── Otimização de imagens (reduz muito o tamanho do PDF) ─────
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// Reduz a imagem para no máximo `maxPx` e recomprime.
+// PNG continua PNG (preserva transparência); o resto vira JPEG leve.
+async function optimizeImage(dataUrl, maxPx = 300, jpegQuality = 0.75) {
+  if (!dataUrl) return null;
+  const isPng = dataUrl.startsWith('data:image/png');
+  const fallback = { data: dataUrl, format: isPng ? 'PNG' : 'JPEG' };
+  try {
+    const img = await loadImage(dataUrl);
+    const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!isPng) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h); }
+    ctx.drawImage(img, 0, 0, w, h);
+    return isPng
+      ? { data: canvas.toDataURL('image/png'), format: 'PNG' }
+      : { data: canvas.toDataURL('image/jpeg', jpegQuality), format: 'JPEG' };
+  } catch (e) {
+    console.warn('Nao foi possivel otimizar a imagem:', e);
+    return fallback;
+  }
+}
+
 export async function generateSchedulePDF({
   churchName, ministryLabel, periodLabel,
   ministry, dates, scheduleData,
   ministryImage, observations,
 }) {
   const isRecepcao = ministry?.id === 'recepcao';
-  const doc  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const doc  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 12;
@@ -25,16 +61,20 @@ export async function generateSchedulePDF({
   doc.setFillColor(30, 58, 95);
   doc.rect(0, 0, pageW, 42, 'F');
 
-  try { doc.addImage(ADVENTIST_LOGO_BASE64, 'PNG', margin - 2, 5, 30, 30); }
+  // Logo IASD: reduzida para 300px (impressa com 30mm, continua nítida)
+  const logo = await optimizeImage(ADVENTIST_LOGO_BASE64, 300);
+  try { doc.addImage(logo.data, logo.format, margin - 2, 5, 30, 30, 'logo-iasd', 'FAST'); }
   catch (e) { console.warn('Erro logo:', e); }
 
   if (isRecepcao) {
-    try { doc.addImage(RECEPCAO_IMAGE_BASE64, 'JPEG', 105, 2, 103, 38); }
+    // Imagem da Recepção já é leve e precisa de largura: usada como está
+    try { doc.addImage(RECEPCAO_IMAGE_BASE64, 'JPEG', 105, 2, 103, 38, 'img-recepcao', 'FAST'); }
     catch (e) { console.warn('Erro imagem recepcao:', e); }
   } else if (ministryImage) {
+    // Imagem enviada pelo diretor (até 500KB): reduzida e recomprimida
+    const mImg = await optimizeImage(ministryImage, 300, 0.75);
     try {
-      const ext = ministryImage.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-      doc.addImage(ministryImage, ext, pageW - margin - 32, 4, 32, 32);
+      doc.addImage(mImg.data, mImg.format, pageW - margin - 32, 4, 32, 32, 'img-ministerio', 'FAST');
     } catch (e) { console.warn('Erro imagem:', e); }
   }
 
